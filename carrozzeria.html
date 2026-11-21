@@ -1,0 +1,91 @@
+<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carrozzeria – Chiappetta Auto</title>
+<style>
+:root{--bg:#f4f3ef;--card:#fff;--ink:#1c1c1a;--soft:#6b6b66;--line:#e2e0da;--blue:#1b55cc;--green:#1a7a45;--amber:#c05000;--red:#b52828}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink);padding:14px}
+.wrap{max-width:760px;margin:0 auto}h1{font-size:20px;margin:4px 0 2px}.sub{color:var(--soft);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px}label{display:block;font-size:12px;color:var(--soft);margin:8px 0 3px}
+input,textarea,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;font-size:16px;font-family:inherit;background:#fff}
+textarea{min-height:60px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:520px){.row{grid-template-columns:1fr}}
+button{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:11px 16px;font-size:15px;cursor:pointer}button.g{background:#e9e8e3;color:var(--ink)}button.v{background:var(--green)}button.r{background:#fff;color:var(--red);border:1px solid var(--line)}
+.job{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}.job b{font-size:16px}.job small{color:var(--soft)}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;margin-left:6px}.in{background:var(--amber)}.pr{background:var(--green)}
+.msg{font-size:13px;min-height:18px;margin:8px 0;color:var(--soft)}.err{color:var(--red)}.ok{color:var(--green)}
+.act{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.box{background:#faf9f6;border:1px dashed var(--line);border-radius:8px;padding:10px;margin-top:10px}
+</style></head><body><div class="wrap">
+<h1>🎨 Carrozzeria – lavori per Chiappetta Auto</h1><div class="sub" id="sub">Caricamento…</div>
+<div id="app" style="display:none">
+<div class="card"><h2>➕ Nuova vettura presa in carico</h2>
+<div class="row"><div><label>Targa *</label><input id="n-targa" autocapitalize="characters" placeholder="AB123CD"></div><div><label>Veicolo (marca e modello)</label><input id="n-veic" placeholder="Toyota Yaris"></div></div>
+<label>Lavoro da eseguire</label><textarea id="n-lav" placeholder="Es. verniciatura paraurti anteriore, ritocco portiera"></textarea>
+<label>Data di ingresso</label><input type="date" id="n-data">
+<div class="act"><button id="n-ok">Aggiungi</button></div><div class="msg" id="n-msg"></div></div>
+<div class="card"><h2>🔧 In lavorazione da noi</h2><div style="font-size:13px;color:var(--soft);margin:-4px 0 10px">Quando la vettura è finita premi <b>"Pronta e carica fattura"</b>: inserisci importo, numero e allega la fattura.</div><div id="l-in"></div></div>
+<div class="card" id="c-nf" style="display:none;border-color:#e3b341"><h2>📎 Fatture da caricare</h2><div id="l-nf"></div></div>
+<div class="card"><h2>✅ Pronte / consegnate</h2><div id="l-pr"></div></div>
+</div></div>
+<script>
+var FB='https://officina-toyota-hub-default-rtdb.europe-west1.firebasedatabase.app',K='';
+function cleanK(v){v=String(v||'');var m=v.match(/[?&]k=([A-Za-z0-9_-]+)/);if(m)return m[1];return v.trim().replace(/[^A-Za-z0-9_-]/g,'');}
+try{K=cleanK(new URLSearchParams(location.search).get('k')||'');}catch(e){}
+try{if(K)localStorage.setItem('carr_k',K);else K=cleanK(localStorage.getItem('carr_k')||'');}catch(e){}
+function reset(){try{localStorage.removeItem('carr_k');}catch(e){}K='';location.href=location.pathname;}
+var PUB='cU2v7qLFAf54xykUJgh8',J={},MAXB=2800000,BUSY=false;
+function $(i){return document.getElementById(i);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function api(p,m,b){return fetch(FB+p+'.json',{method:m||'GET',headers:{'Content-Type':'application/json'},body:b===undefined?undefined:JSON.stringify(b),cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();});}
+function nt(t){return String(t||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();}
+function it(d){return d?String(d).slice(0,10).split('-').reverse().join('/'):'–';}
+function oggi(){return new Date().toISOString().slice(0,10);}
+function eur(n){return (Number(n)||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+function msg(id,t,c){var e=$(id);if(!e)return;e.textContent=t;e.className='msg '+(c||'');}
+function leggiFile(f){return new Promise(function(res,rej){
+ if(!f){res(null);return;}
+ var r=new FileReader();r.onerror=function(){rej(new Error('File non leggibile'));};
+ r.onload=function(){var d=r.result;
+  if(/^data:image\//.test(d)){var im=new Image();im.onload=function(){var s=Math.min(1,1800/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);var o=c.toDataURL('image/jpeg',.8);if(o.length>MAXB)rej(new Error('Foto troppo pesante'));else res({nome:(f.name||'fattura').replace(/\.[^.]+$/,'')+'.jpg',tipo:'image/jpeg',dati:o});};im.onerror=function(){rej(new Error('Immagine non valida'));};im.src=d;}
+  else if(/^data:application\/pdf/.test(d)){if(d.length>MAXB)rej(new Error('PDF troppo pesante (max circa 2 MB). Prova a scansionarlo con qualità più bassa o invia una foto.'));else res({nome:f.name||'fattura.pdf',tipo:'application/pdf',dati:d});}
+  else rej(new Error('Carica un PDF o una foto'));};
+ r.readAsDataURL(f);});}
+function carica(){
+ if(!K){$('sub').innerHTML='<span class="err">Apri il link che ti ha inviato Chiappetta Auto, oppure incolla qui il codice di accesso:</span><br><input id="cod" placeholder="Codice di accesso" style="margin-top:8px"><div class="act"><button id="codb">Entra</button></div>';$('codb').onclick=function(){var v=cleanK($('cod').value);if(v){K=v;try{localStorage.setItem('carr_k',K);}catch(e){}carica();}};return;}
+ api('/ins/'+K+'/ok').then(function(ok){
+  if(ok!==true){$('sub').innerHTML='<span class="err">Codice non valido o non più attivo. Chiedi a Chiappetta Auto il link aggiornato.</span><br><div class="act"><button class="g" onclick="reset()">Inserisci un altro codice</button></div>';return;}
+  $('sub').textContent='Qui inserisci le vetture che prendi in carico e, quando sono pronte, l\'importo e la fattura.';$('app').style.display='block';
+  return api('/ins/'+K+'/lavori').then(function(d){J=d||{};disegna();});
+ }).catch(function(e){$('sub').innerHTML='<span class="err">Errore di connessione ('+esc(e&&e.message||'')+'). Riprova tra poco.</span><br><div class="act"><button class="g" onclick="carica()">Riprova</button><button class="g" onclick="reset()">Inserisci un altro codice</button></div>';});
+}
+function disegna(){
+ var L=Object.keys(J).map(function(k){return J[k];}),NF=L.filter(function(j){return j.stato==='pronta'&&!j.hasF;}),IN=L.filter(function(j){return j.stato!=='pronta';}).sort(function(a,b){return (b.creato||0)-(a.creato||0);}),PR=L.filter(function(j){return j.stato==='pronta'&&j.hasF;}).sort(function(a,b){return (b.pronta||0)-(a.pronta||0);});
+ $('l-in').innerHTML=IN.length?IN.map(function(j){return '<div class="job" data-id="'+esc(j.id)+'"><b>'+esc(j.targa)+'</b> '+esc(j.veicolo||'')+'<span class="tag in">in lavorazione</span><br><small>Dal '+it(j.dataIn)+(j.lavoro?' · '+esc(j.lavoro):'')+'</small><div class="act"><button class="v" data-a="pronta">✓ Pronta e carica fattura</button><button class="r" data-a="del">Elimina</button></div><div class="box" data-box style="display:none"></div></div>';}).join(''):'<div style="color:var(--soft);font-size:14px">Nessuna vettura in lavorazione.</div>';
+ $('c-nf').style.display=NF.length?'block':'none';
+ $('l-nf').innerHTML=NF.map(function(j){return '<div class="job" data-id="'+esc(j.id)+'"><b>'+esc(j.targa)+'</b> '+esc(j.veicolo||'')+'<span class="tag pr">pronta</span><br><small>'+eur(j.importo)+(j.nFattura?' · fatt. '+esc(j.nFattura):'')+' · <span class="err">fattura mancante</span></small><div class="act"><button class="v" data-a="fatt">📎 Allega fattura</button></div><div class="box" data-box style="display:none"></div></div>';}).join('');
+ $('l-pr').innerHTML=PR.length?PR.slice(0,40).map(function(j){return '<div class="job" data-id="'+esc(j.id)+'"><b>'+esc(j.targa)+'</b> '+esc(j.veicolo||'')+'<span class="tag pr">pronta</span><br><small>Ingresso '+it(j.dataIn)+' · pronta '+it(new Date(j.pronta||0).toISOString())+' · '+eur(j.importo)+(j.nFattura?' · fatt. '+esc(j.nFattura):'')+'</small><br><small>'+(j.hasF?'📎 fattura allegata':'<span class="err">⚠ fattura mancante</span>')+(j.imp?' · registrata da Chiappetta Auto':'')+'</small><div class="act"><button class="g" data-a="fatt">'+(j.hasF?'Sostituisci fattura':'Allega fattura')+'</button></div><div class="box" data-box style="display:none"></div></div>';}).join(''):'<div style="color:var(--soft);font-size:14px">Ancora nessuna vettura pronta.</div>';
+ document.querySelectorAll('.job [data-a]').forEach(function(b){b.onclick=function(){var id=b.closest('.job').dataset.id,a=b.dataset.a;if(a==='del')elimina(id);else apriBox(b.closest('.job'),id,a);};});
+}
+function apriBox(el,id,a){var box=el.querySelector('[data-box]'),j=J[id];box.style.display='block';
+ var pr=a==='pronta';
+ box.innerHTML=(pr?'<label>Importo della fattura € *</label><input data-i="imp" inputmode="decimal" placeholder="Es. 450,00">':'')+'<label>Numero fattura</label><input data-i="nf" value="'+esc(j.nFattura||'')+'"><label>Allega la fattura (PDF o foto)'+(pr?'':' *')+'</label><input type="file" data-i="file" accept="application/pdf,image/*"><div class="act"><button class="v" data-i="ok">'+(pr?'Segna pronta e invia':'Invia fattura')+'</button><button class="g" data-i="x">Annulla</button></div><div class="msg" data-i="m"></div>';
+ var q=function(n){return box.querySelector('[data-i="'+n+'"]');};
+ q('x').onclick=function(){box.style.display='none';};
+ q('ok').onclick=function(){if(BUSY)return;var m=q('m'),imp=null;
+  if(pr){imp=parseFloat(String(q('imp').value).replace(/\./g,'').replace(',','.'));if(!(imp>0)){m.textContent='Inserisci l\'importo della fattura.';m.className='msg err';return;}}
+  var f=q('file').files[0];if(!pr&&!f){m.textContent='Scegli il file della fattura.';m.className='msg err';return;}
+  BUSY=true;m.textContent='Invio in corso…';m.className='msg';
+  leggiFile(f).then(function(F){
+   var up=F?api('/ins/'+K+'/fatture/'+id,'PUT',F):Promise.resolve();
+   return up.then(function(){var p={nFattura:q('nf').value.trim()};if(F){p.hasF=true;p.fNome=F.nome;}if(pr){p.stato='pronta';p.pronta=Date.now();p.importo=Math.round(imp*100)/100;}
+    return api('/ins/'+K+'/lavori/'+id,'PATCH',p).then(function(){if(pr)return api('/perf/'+PUB+'/'+id,'PATCH',{stato:'pronta',pronta:p.pronta});});});
+  }).then(function(){BUSY=false;return api('/ins/'+K+'/lavori').then(function(d){J=d||{};disegna();});}).catch(function(e){BUSY=false;m.textContent=(e&&e.message)||'Errore, riprova.';m.className='msg err';});};
+}
+function elimina(id){if(!confirm('Eliminare questa vettura dall\'elenco?'))return;api('/ins/'+K+'/lavori/'+id,'DELETE').then(function(){return api('/perf/'+PUB+'/'+id,'DELETE');}).then(function(){delete J[id];disegna();}).catch(function(){alert('Errore, riprova.');});}
+$('n-data').value=oggi();
+$('n-ok').onclick=function(){var t=nt($('n-targa').value);if(t.length<5){msg('n-msg','Inserisci la targa.','err');return;}
+ if(Object.keys(J).some(function(k){return nt(J[k].targa)===t&&J[k].stato!=='pronta';})){msg('n-msg','Questa targa è già in lavorazione.','err');return;}
+ var id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),d=$('n-data').value||oggi();
+ var j={id:id,targa:t,veicolo:$('n-veic').value.trim(),lavoro:$('n-lav').value.trim(),stato:'in',creato:Date.now(),dataIn:d};
+ msg('n-msg','Salvataggio…');
+ api('/ins/'+K+'/lavori/'+id,'PUT',j).then(function(){return api('/perf/'+PUB+'/'+id,'PUT',{id:id,targa:t,veicolo:j.veicolo,lavoro:j.lavoro,stato:'in',creato:j.creato,dataIn:d});}).then(function(){J[id]=j;['n-targa','n-veic','n-lav'].forEach(function(x){$(x).value='';});msg('n-msg','✓ Vettura aggiunta. Chiappetta Auto e l\'officina la vedono subito.','ok');disegna();}).catch(function(){msg('n-msg','Errore di connessione, riprova.','err');});};
+carica();setInterval(function(){if(BUSY||!K||$('app').style.display==='none')return;if(document.querySelector('[data-box]:not([style*="none"])'))return;api('/ins/'+K+'/lavori').then(function(d){J=d||{};disegna();}).catch(function(){});},30000);
+</script></body></html>
